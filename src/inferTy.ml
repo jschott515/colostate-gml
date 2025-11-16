@@ -48,7 +48,7 @@ let ty_err_no_loc e = { tedesc = e; teloc = None; teinspection_stack = []}
 
 let ty_err e loc = { tedesc = e; teloc = Some loc; teinspection_stack = []}
 
-exception TypeError of ty_error [@@deriving show]
+exception TypeError of ty_error
 
 type 'a tycheck_result = ('a, ty_error) result [@@deriving show]
 

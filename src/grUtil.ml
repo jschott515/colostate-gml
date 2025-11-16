@@ -95,7 +95,7 @@ let gr_err_no_loc e = { gedesc = e; geloc = None; geinspection_stack = []}
 
 let gr_err e loc = { gedesc = e; geloc = Some loc; geinspection_stack = []}
 
-exception GraphError of gr_error [@@deriving show]
+exception GraphError of gr_error
 
 type 'a grcheck_result = ('a, gr_error) result [@@deriving show]
 
