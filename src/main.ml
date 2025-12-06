@@ -178,6 +178,8 @@ let _ = Format.fprintf Format.std_formatter "\n"
 
 let chan = open_in !fname
 let parsed_program = parse chan
+let _ = message "Abstract Syntax Tree:"
+let _ = Format.fprintf Format.std_formatter "%a@." pprint_p_prog parsed_program
 let _ = message "starting type inference"
 let tycheck_result =
   try infer_ty parsed_program
