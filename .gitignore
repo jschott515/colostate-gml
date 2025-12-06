@@ -38,3 +38,4 @@ src/parser/lexer.ml
 gml
 src/parser/parser.ml
 src/parser/parser.mli
+*.json

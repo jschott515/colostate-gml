@@ -59,6 +59,32 @@ let infile_fun f =
 
 let _ = Arg.parse optspecs infile_fun usage_msg
 
+(* If the input file is a .c file, run clang to generate JSON and
+   replace fname with the generated JSON file *)
+let () =
+  if Filename.check_suffix !fname ".c" then begin
+    let dir = Filename.dirname !fname in
+    let base = Filename.basename !fname in
+    let stem = Filename.remove_extension base in
+    let json_file = Filename.concat dir (stem ^ ".json") in
+
+    let cmd = Printf.sprintf
+      "clang -fopenmp -fno-color-diagnostics \
+       -Xclang -ast-dump=json -Xclang -ast-dump-filter=%s \
+       -fsyntax-only %s > %s"
+      stem !fname json_file
+    in
+    Printf.printf "Running clang to generate AST JSON:\n%s\n%!" cmd;
+
+    let exit_code = Sys.command cmd in
+    if exit_code <> 0 then begin
+      prerr_endline "Error: clang AST dump failed.";
+      exit 1
+    end;
+
+    fname := json_file
+  end
+
 (* Run f arg and record the execution time in milliseconds in timer *)
 let with_timer timer f arg =
   let start_t = Unix.gettimeofday () in
