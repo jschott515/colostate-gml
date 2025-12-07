@@ -20,7 +20,7 @@ let pp_void _ _ = ()
 
 type longid = Id of string
             | Modid of string * longid
-  [@@deriving show, eq]
+  [@@deriving show, eq, yojson]
 
 let rec string_of_longid id =
   match id with
@@ -38,11 +38,20 @@ module VMap = Map.Make(S)
 
 exception Impossible
 type void = Void of void
+let rec void_to_yojson _ =
+  `String "<impossible>"
+let void_of_yojson _ =
+  Error "void cannot be decoded"
+
 let equal_void _ _ = raise Impossible
 
 let rec abort (Void v) : 'a = abort v
 
-type vertex_var = VId of string UnionFind.t [@@deriving show, eq]
+type vertex_var =
+  | VId of string UnionFind.t
+    [@to_yojson UnionFind.to_yojson]
+    [@of_yojson UnionFind.of_yojson]
+[@@deriving show, eq, yojson]
 
 type 'g_unif vs_typ =
   VSTVertex
@@ -50,7 +59,7 @@ type 'g_unif vs_typ =
 | VSTUVar of 'g_unif
 | VSTProd of 'g_unif vs_typ list
 | VSTCoRec of string * 'g_unif vs_typ
-[@@deriving show, eq, ord]
+[@@deriving show, eq, ord, yojson]
 
 (*
 type 'g_unif vs_schema =
@@ -65,7 +74,7 @@ type ('g_unif) vertex_struct =
 | VSTuple of ('g_unif) vertex_struct list
 (* Last component is the VS type of the first component *)
 | VSProj of ('g_unif) vertex_struct * int * 'g_unif vs_typ
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 type 'g_unif graph =
   GEmpty
@@ -83,7 +92,7 @@ type 'g_unif graph =
 | GApp of 'g_unif graph
           * 'g_unif vertex_struct
           * 'g_unif vertex_struct
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 type ('t_unif, 'graph, 'vert, 'vert_param) typ_desc =
 | TVar of string
@@ -99,18 +108,21 @@ type ('t_unif, 'graph, 'vert, 'vert_param) typ_desc =
 (* e.g. t List.t[U] *)
 | TConstr of longid * ('t_unif, 'graph, 'vert, 'vert_param) typ list * 'vert
 | TRecType of (string * ('t_unif, 'graph, 'vert, 'vert_param) typ) list
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 and ('t_unif, 'graph, 'vert, 'vert_param) typ =
   { tdesc : ('t_unif, 'graph, 'vert, 'vert_param) typ_desc;
-    tloc  : loc [@equal fun _ _ -> true] }
-    [@@deriving show, eq]
+    tloc  : loc
+      [@equal fun _ _ -> true]
+      [@to_yojson (fun _ -> `Null)]
+      [@of_yojson (fun _ -> Ok dloc)]
+  } [@@deriving show, eq, yojson]
 
 type ('t_unif, 'graph, 'vert, 'vert_param) schema =
   SMono of ('t_unif, 'graph, 'vert, 'vert_param) typ
 | SForall of string * ('t_unif, 'graph, 'vert, 'vert_param) schema
 | SForallG of string * ('t_unif, 'graph, 'vert, 'vert_param) schema
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 let rec type_of_schema s  =
   match s with
@@ -122,9 +134,9 @@ type infixop =
   | Lt | Le | Gt | Ge | Eq | Ne
   | And | Or
   | Concat
-  [@@deriving show, eq]
+  [@@deriving show, eq, yojson]
 
-type p_typ = (void, unit, unit, unit) typ [@@deriving show, eq]
+type p_typ = (void, unit, unit, unit) typ [@@deriving show, eq, yojson]
 type p_schema = (void, unit, unit, unit) schema [@@deriving show, eq]
 
 type 'vert const =
@@ -134,17 +146,17 @@ type 'vert const =
 | Bool of bool
 | Unit
 | Futref of 'vert
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 type p_const = unit const [@@deriving show, eq]
 
 type is_recursive = Recursive | Terminal
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 (* e.g. | Some x -> e is ("Some", ["x"], e) *)
 type ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) match_case =
   longid * string list * ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) expr
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 
 (* NOTE: 'vert_param = vertex_name * vs_typ in graphchecking step  *)
@@ -206,15 +218,18 @@ and ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) expr_desc =
   (* Annotations (e : t) *)
   | EAnnot of ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) expr * p_typ
   | ENewVert of vertex_var * 'g_unif vs_typ * ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) expr
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 and ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) expr =
   { edesc  : ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) expr_desc;
-    eloc   : loc [@equal fun _ _ -> true];
+    eloc   : loc
+      [@equal fun _ _ -> true]
+      [@to_yojson (fun _ -> `Null)]
+      [@of_yojson (fun _ -> Ok dloc)];
     etyp   : 'typ;
     egr    : 'graph
   }
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 type ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) decl_desc =
   (* let x (: t) = e;; *)
@@ -232,24 +247,27 @@ type ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) decl_desc =
   | DExternal of longid * p_typ
   (* type ('unif, 'b) t = | A of int * string | ...*)
   | DTypeDef of string list * string * (string * p_typ) list
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 and ('t_unif, 'g_unif, 'typ, 'schema, 'graph, 'vert, 'vert_param) decl =
   { ddesc : ('t_unif, 'g_unif, 'typ, 'graph, 'vert, 'vert_param) decl_desc;
-    dloc  : loc [@equal fun _ _ -> true];
+    dloc  : loc
+      [@equal fun _ _ -> true]
+      [@to_yojson (fun _ -> `Null)]
+      [@of_yojson (fun _ -> Ok dloc)];
     dinfo : 'schema }
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 (* A program is a list of declarations *)
 type ('t_unif, 'g_unif, 'typ, 'schema, 'graph, 'vert, 'vert_param) prog =
   ('t_unif, 'g_unif, 'typ, 'schema, 'graph, 'vert, 'vert_param) decl list
-[@@deriving show, eq]
+[@@deriving show, eq, yojson]
 
 
 (* expr, decl, programs immediately after parsing *)
 type p_expr = (void, void, unit, unit, unit, unit) expr [@@deriving show, eq]
 type p_decl = (void, void, unit, unit, unit, unit, unit) decl [@@deriving show, eq]
-type p_prog = (void, void, unit, unit, unit, unit, unit) prog [@@deriving show, eq]
+type p_prog = (void, void, unit, unit, unit, unit, unit) prog [@@deriving show, eq, yojson]
 
 (* expr, decl, programs that have been type annotated *)
 type t_typ = (int, unit, unit, unit) typ [@@deriving show, eq]

@@ -11,6 +11,8 @@ let rec find ((N (_v, r)) as k) =
 
 let keyof (N (v, _)) = v
 
+let make x = N (x, ref None)
+
 let findkey k = keyof (find k)
 
 let union (v1: 'a t_int) (v2: 'a t_int) =
@@ -25,3 +27,11 @@ type 'a t = 'a t_int
                   fun a_printer fmt k -> fprintf fmt "%a" a_printer (findkey k)]
 
               [@@deriving show, eq]
+
+let rec to_yojson f k =
+  f (findkey k)
+
+let rec of_yojson f json =
+  match f json with
+  | Ok key -> Ok (make key)
+  | Error _ as e -> e

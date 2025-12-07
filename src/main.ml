@@ -66,7 +66,7 @@ let () =
     let dir = Filename.dirname !fname in
     let base = Filename.basename !fname in
     let stem = Filename.remove_extension base in
-    let json_file = Filename.concat dir (stem ^ ".json") in
+    let json_file = !fname ^ ".json" in
 
     let cmd = Printf.sprintf
       "clang -fopenmp -fno-color-diagnostics \
@@ -204,8 +204,16 @@ let _ = Format.fprintf Format.std_formatter "\n"
 
 let chan = open_in !fname
 let parsed_program = parse chan
-let _ = message "Abstract Syntax Tree:"
-let _ = Format.fprintf Format.std_formatter "%a@." pprint_p_prog parsed_program
+let () =
+  if Filename.check_suffix !fname ".ml" then begin
+    let json = p_prog_to_yojson parsed_program in
+    let out =
+      !fname ^ ".json"
+    in
+    Yojson.Safe.to_file out json;
+    message (Printf.sprintf "Wrote AST JSON to %s" out)
+  end
+
 let _ = message "starting type inference"
 let tycheck_result =
   try infer_ty parsed_program
