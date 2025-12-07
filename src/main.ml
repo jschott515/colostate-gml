@@ -204,14 +204,23 @@ let _ = Format.fprintf Format.std_formatter "\n"
 
 let chan = open_in !fname
 let parsed_program = parse chan
-let () =
+(* Sanity Check - dump a load ast to verify json mechanism *)
+let parsed_program =
   if Filename.check_suffix !fname ".ml" then begin
     let json = p_prog_to_yojson parsed_program in
-    let out =
-      !fname ^ ".json"
-    in
+    let out = !fname ^ ".json" in
     Yojson.Safe.to_file out json;
-    message (Printf.sprintf "Wrote AST JSON to %s" out)
+    message (Printf.sprintf "Wrote AST JSON to %s" out);
+
+    let json2 = Yojson.Safe.from_file out in
+    match p_prog_of_yojson json2 with
+    | Ok prog ->
+        message "Reloaded AST from JSON successfully.";
+        prog
+    | Error e ->
+        failwith ("Failed to load JSON AST: " ^ e)
+  end else begin
+    parsed_program
   end
 
 let _ = message "starting type inference"
