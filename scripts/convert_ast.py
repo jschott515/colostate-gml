@@ -3,19 +3,25 @@ Convert Clang C Abstract Syntax Tree to GML Format
 """
 import argparse
 import json
+import typing
 
 import pygml.ast
 
 
 def main() -> None:
     cfg = parse_args()
-    with open(cfg.FILE, "r") as f:
+    file = typing.cast(str, cfg.FILE)
+
+    with open(file, "r") as f:
         data = json.load(f)
-    prog = pygml.ast.decode_program(data)
-    json2 = pygml.ast.encode_program(prog)
-    
-    with open(cfg.FILE + "2", "w") as f:
-        json.dump(json2, f)
+    prog = pygml.ast.convert_program(data)
+    conv = pygml.ast.encode_program(prog)
+
+    idx = file.index(".json")
+    conv_file = file[:idx] + ".conv" + file[idx:]
+
+    with open(conv_file, "w") as f:
+        json.dump(conv, f)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)

@@ -4,6 +4,12 @@ import enum
 import typing
 
 
+@dataclasses.dataclass
+class Unhandled:
+    kind: str
+    raw: object
+
+
 """
 LONG IDENTIFIERS
 """

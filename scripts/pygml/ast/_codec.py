@@ -190,6 +190,8 @@ def decode_expr(data) -> Expr:
 
 def encode_expr(e: Expr):
     d = e.edesc
+    if isinstance(d, Unit):
+        return None
 
     # Basic
     if isinstance(d, EVar):
@@ -219,14 +221,14 @@ def encode_expr(e: Expr):
         ed = ["EIf",
             encode_expr(d.cond),
             encode_expr(d.then),
-            encode_expr(d.els)
+            None if d.els is None else encode_expr(d.els)
         ]
 
     elif isinstance(d, ELet):
         ed = ["ELet",
             d.name,
             d.ann,
-            encode_expr(d.value),
+            None if d.value is None else encode_expr(d.value),
             encode_expr(d.body)
         ]
 
