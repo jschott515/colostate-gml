@@ -212,7 +212,17 @@ let parsed_program =
     Yojson.Safe.to_file out json;
     message (Printf.sprintf "Wrote AST JSON to %s" out);
 
-    let json2 = Yojson.Safe.from_file out in
+    (* Run python script *)
+    let cmd = Printf.sprintf "PYTHONPATH=scripts python3 -m convert_ast %s" out in
+    message (Printf.sprintf "Running: %s" cmd);
+
+    let exit_code = Sys.command cmd in
+    if exit_code <> 0 then begin
+      prerr_endline "Error: AST Convert failed.";
+      exit 1
+    end;
+
+    let json2 = Yojson.Safe.from_file (out ^ "2") in
     match p_prog_of_yojson json2 with
     | Ok prog ->
         message "Reloaded AST from JSON successfully.";
