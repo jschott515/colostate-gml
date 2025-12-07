@@ -59,32 +59,6 @@ let infile_fun f =
 
 let _ = Arg.parse optspecs infile_fun usage_msg
 
-(* If the input file is a .c file, run clang to generate JSON and
-   replace fname with the generated JSON file *)
-let () =
-  if Filename.check_suffix !fname ".c" then begin
-    let dir = Filename.dirname !fname in
-    let base = Filename.basename !fname in
-    let stem = Filename.remove_extension base in
-    let json_file = !fname ^ ".json" in
-
-    let cmd = Printf.sprintf
-      "clang -fopenmp -fno-color-diagnostics \
-       -Xclang -ast-dump=json -Xclang -ast-dump-filter=%s \
-       -fsyntax-only %s > %s"
-      stem !fname json_file
-    in
-    Printf.printf "Running clang to generate AST JSON:\n%s\n%!" cmd;
-
-    let exit_code = Sys.command cmd in
-    if exit_code <> 0 then begin
-      prerr_endline "Error: clang AST dump failed.";
-      exit 1
-    end;
-
-    fname := json_file
-  end
-
 (* Run f arg and record the execution time in milliseconds in timer *)
 let with_timer timer f arg =
   let start_t = Unix.gettimeofday () in
@@ -202,18 +176,33 @@ let print_timers out =
 
 let _ = Format.fprintf Format.std_formatter "\n"
 
-let chan = open_in !fname
-let parsed_program = parse chan
-(* Sanity Check - dump a load ast to verify json mechanism *)
 let parsed_program =
   if Filename.check_suffix !fname ".ml" then begin
-    let json = p_prog_to_yojson parsed_program in
-    let out = !fname ^ ".json" in
-    Yojson.Safe.to_file out json;
-    message (Printf.sprintf "Wrote AST JSON to %s" out);
+    let chan = open_in !fname in
+    parse chan
+  end else begin
+    (* Handle c program *)
+    let dir = Filename.dirname !fname in
+    let base = Filename.basename !fname in
+    let stem = Filename.remove_extension base in
+    let json_file = !fname ^ ".json" in
+    (* Dump json *)
+    let cmd = Printf.sprintf
+      "clang -fopenmp -fno-color-diagnostics \
+       -Xclang -ast-dump=json -Xclang -ast-dump-filter=%s \
+       -fsyntax-only %s > %s"
+      stem !fname json_file
+    in
+    message (Printf.sprintf "Running clang to generate AST JSON:\n%s\n%!" cmd);
 
-    (* Run python script *)
-    let cmd = Printf.sprintf "PYTHONPATH=scripts python3 -m convert_ast %s" out in
+    let exit_code = Sys.command cmd in
+    if exit_code <> 0 then begin
+      prerr_endline "Error: clang AST dump failed.";
+      exit 1
+    end;
+
+    (*Convert to .ml AST*)
+    let cmd = Printf.sprintf "PYTHONPATH=scripts python3 -m convert_ast %s" json_file in
     message (Printf.sprintf "Running: %s" cmd);
 
     let exit_code = Sys.command cmd in
@@ -222,15 +211,16 @@ let parsed_program =
       exit 1
     end;
 
-    let json2 = Yojson.Safe.from_file (out ^ "2") in
-    match p_prog_of_yojson json2 with
+    let conv_json = (json_file ^ ".conv") in
+    message (Printf.sprintf "Converted json: %s\n" conv_json);
+  
+    let conv_prog = Yojson.Safe.from_file conv_json in
+    match p_prog_of_yojson conv_prog with
     | Ok prog ->
         message "Reloaded AST from JSON successfully.";
         prog
     | Error e ->
         failwith ("Failed to load JSON AST: " ^ e)
-  end else begin
-    parsed_program
   end
 
 let _ = message "starting type inference"

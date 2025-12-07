@@ -67,8 +67,7 @@ OPERATOR_MAP = {
 def convert_op(op_str):
     op = OPERATOR_MAP.get(op_str)
     if op is None:
-        # produce a safe fallback
-        return InfixOp.Concat.name  # or raise, or return None
+        return None
     return op.name
 
 # ------------------------------------------------------------

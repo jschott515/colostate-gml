@@ -17,10 +17,7 @@ def main() -> None:
     prog = pygml.ast.convert_program(data)
     conv = pygml.ast.encode_program(prog)
 
-    idx = file.index(".json")
-    conv_file = file[:idx] + ".conv" + file[idx:]
-
-    with open(conv_file, "w") as f:
+    with open(file + ".conv", "w") as f:
         json.dump(conv, f)
 
 def parse_args() -> argparse.Namespace:
