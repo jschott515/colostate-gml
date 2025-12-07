@@ -13,6 +13,8 @@
  (depends
   (ocaml (= 4.14.0))
   menhir
+  yojson
+  ppx_deriving_yojson
   ppx_deriving)
  (depopts
   (ocaml-lsp-server (= 1.15.1-4.14))
