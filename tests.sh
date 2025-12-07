@@ -21,3 +21,13 @@ for file in testcases/*.ml; do
     echo " failure"
   fi
 done
+
+for file in testcases/*.c; do
+  printf "running $file..."
+  _build/default/src/main.exe $file &> $file.out
+  if [ $? -eq 0 ]; then
+    echo " success"
+  else
+    echo " failure"
+  fi
+done
