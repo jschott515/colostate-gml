@@ -8,7 +8,7 @@ long long fib(int n) {
     if (n <= 1) result = 1;
     else
     {
-        #pragma omp task shared(a) if(n > 20)
+        #pragma omp task shared(a)
         a = fib(n - 1);
         b = fib(n - 2);
         #pragma omp taskwait

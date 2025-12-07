@@ -3,28 +3,7 @@ import typing
 from ._types import *
 
 
-# ------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------
-
-def make_const(node: typing.Dict) -> Expr:
-    kind = node["kind"]
-
-    if kind == "IntegerLiteral":
-        return Expr(EConst(Num(int(node["value"]))))
-    if kind == "StringLiteral":
-        return Expr(EConst(String(node["value"])))
-    if kind == "CharacterLiteral":
-        return Expr(EConst(Char(node["value"])))
-    if kind == "CXXBoolLiteralExpr":
-        return Expr(EConst(Bool(node["value"])))
-
-    raise NotImplementedError(f"constant kind {kind}")
-
-def make_id(name: str):
-    return Id(name)
-
-OPERATOR_MAP = {
+CONVERT_OPCODE = {
     "+": InfixOp.Plus,
     "Add": InfixOp.Plus,
 
@@ -64,148 +43,113 @@ OPERATOR_MAP = {
     "^": InfixOp.Concat,
 }
 
-def convert_op(op_str):
-    op = OPERATOR_MAP.get(op_str)
-    if op is None:
-        return None
-    return op.name
 
-# ------------------------------------------------------------
-# helpers
-# ------------------------------------------------------------
+def convert(data: typing.MutableMapping):
+    kind = data["kind"]
 
-def safe(node, default):
-    """Return node if dict, else default."""
-    return node if isinstance(node, dict) else default
-
-
-def inner_list(node):
-    x = node.get("inner") if isinstance(node, dict) else None
-    if x is None:
-        return []
-    if isinstance(x, list):
-        return x
-    return [x]
-
-
-# ------------------------------------------------------------
-# main expression dispatcher
-# ------------------------------------------------------------
-
-def convert_expr(node):
-
-    if not isinstance(node, dict):
-        return Expr(Unhandled("non-dict", node))
-
-    kind = node.get("kind", "<missing>")
-
-    # literals
-    if kind.endswith("Literal"):
-        return make_const(node)
-
-    # variable reference
-    if kind == "DeclRefExpr":
-        return Expr(EVar(Id(node["referencedDecl"]["name"])))
-
-    # operators
-    if kind == "BinaryOperator":
-        lhs = convert_expr(node["inner"][0])
-        rhs = convert_expr(node["inner"][1])
-        return Expr(EInfixop(convert_op(node["opcode"]), lhs, rhs))
-
-    # unwrap casts
-    if kind == "ImplicitCastExpr":
-        return convert_expr(node["inner"][0])
-
-    # function call
-    if kind == "CallExpr":
-        fn = convert_expr(node["inner"][0])
-        arg = convert_expr(node["inner"][1]) if len(node["inner"]) > 1 else None
-        return Expr(EApp(fn, None, None, arg))
-
-    if kind == "DeclStmt":
-        return None
-
-    # if expressions
-    if kind == "IfStmt":
-        cond = convert_expr(node["inner"][0])
-        then = convert_expr(node["inner"][1])
-        els = convert_expr(node["inner"][2]) if len(node["inner"]) > 2 else None
-        return Expr(EIf(cond, then, els))
-
-    # OpenMP futures
-    if kind == "OMPTaskDirective":
-        expr = convert_expr(inner_list(node)[0]["inner"][0])
-        return Expr(EFuture(None, expr))
-
-    if kind == "OMPTaskwaitDirective":
-        return Expr(EForce(Expr(EVar(Id("taskwait")))))
-
-    # statements we collapse
-    if kind == "ReturnStmt":
-        return convert_expr(inner_list(node)[0])
-
-    if kind == "CompoundStmt":
-        return collapse_block(node)
-
-    # anything else
-    return Expr(Unhandled(kind, node))
-
-
-# ------------------------------------------------------------
-# collapse a compound block
-# ------------------------------------------------------------
-
-def collapse_block(node):
-    items = inner_list(node)
-
-    acc = Expr(Unit())   # default empty block → ()
-    for s in reversed(items):
-        e = convert_expr(s)
-        acc = Expr(ELet("_", None, e, acc))
-
-    return acc
-
-
-# ------------------------------------------------------------
-# declaration dispatcher
-# ------------------------------------------------------------
-
-def convert_decl(node):
-    if not isinstance(node, dict):
-        return Decl(Unhandled("non-dict-decl", node))
-
-    kind = node.get("kind")
+    if kind == "IntegerLiteral":
+        return Expr(EConst(Num(int(data["value"]))))
+    if kind == "StringLiteral":
+        return Expr(EConst(String(data["value"])))
+    if kind == "CharacterLiteral":
+        return Expr(EConst(Char(data["value"])))
+    if kind == "CXXBoolLiteralExpr":
+        return Expr(EConst(Bool(data["value"])))
 
     if kind == "FunctionDecl":
-        return convert_function(node)
+        name = data["name"]
+        return Decl(
+            DVal(
+                name,
+                None,
+                Expr(
+                    EFunc(
+                        'Recursive',
+                        name,
+                        data["inner"][0]["name"],
+                        None, None, None, None,
+                        convert(data["inner"][1]),
+                    )
+                )
+            )
+        )
+    if kind == "CompoundStmt":
+        if len(data["inner"]) == 3:
+            return convert(data["inner"][1])  # FIXME bad assumption
+        else:
+            return Expr(
+                ELet(
+                    "fa",
+                    None,
+                    convert(data["inner"][0]),  # Handle Task
+                    Expr(
+                        ELet(
+                            data["inner"][1]["inner"][0]["referencedDecl"]["name"],
+                            None,
+                            convert(data["inner"][1]["inner"][1]),  # to CallExpr
+                            Expr(
+                                ELet(
+                                    "a",
+                                    None,
+                                    convert(data["inner"][2]),  # to OmpTaskWait
+                                    convert(data["inner"][3]),  # to BinaryOperator - assign result
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+    if kind == "IfStmt":
+        assert len(data["inner"]) == 3, "requires if/then/else expressions"
+        return Expr(
+            EIf(
+                convert(data["inner"][0]),
+                convert(data["inner"][1]),
+                convert(data["inner"][2]),
+            )
+        )
+    if kind == "ImplicitCastExpr":
+        return convert(data["inner"][0])
+    if kind == "DeclRefExpr":
+        return Expr(EVar(Id(data["referencedDecl"]["name"])))
+    if kind == "BinaryOperator":
+        op = data["opcode"]
+        if op == "=":
+            if data["inner"][0]["referencedDecl"]["name"] == "result":
+                return convert(data["inner"][1])
+        return Expr(
+            EInfixop(
+                CONVERT_OPCODE[op].value,
+                convert(data["inner"][0]),
+                convert(data["inner"][1]),
+            )   
+        )
+    if kind == "OMPTaskDirective":
+        return Expr(
+            EFuture(
+                None,
+                convert(data["inner"][2]["inner"][0]["inner"][0]["inner"][1])  # to CallExpr
+            )
+        )
+    if kind == "OMPTaskwaitDirective":
+        return Expr(
+            EForce(
+                Expr(
+                    EVar(Id("fa"))  # FIXME
+                )
+            )
+        )
+    if kind == "CallExpr":
+        return Expr(
+            EApp(
+                convert(data["inner"][0]),
+                None,
+                None,
+                convert(data["inner"][1]),
+            )
+        )
+    raise ValueError(kind)
 
-    return Decl(Unhandled(kind, node))
 
-
-def convert_function(node):
-    name = node["name"]
-
-    params = inner_list(node)
-    body = convert_expr(params[-1])
-    arg = params[0]["name"]
-
-    fn = Expr(EFunc("Recursive",
-                    name,
-                    arg,
-                    None,None,None,None,
-                    body))
-
-    return Decl(DVal(name, None, fn))
-
-
-# ------------------------------------------------------------
-# program
-# ------------------------------------------------------------
-
-def convert_program(ast):
-    if isinstance(ast, dict):
-        return [convert_decl(ast)]
-    if isinstance(ast, list):
-        return [convert_decl(n) for n in ast]
-    return [Decl(Unhandled("program", ast))]
+def convert_program(data: typing.MutableMapping):
+    return [convert(data)]
