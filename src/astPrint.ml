@@ -363,6 +363,7 @@ let pprint_g_decl : formatter -> g_decl -> unit =
     , pprint_g_typ
     )
 
+let pprint_p_prog = seq pprint_p_decl ";;\n\n"
 let pprint_t_prog = seq pprint_t_decl ";;\n\n"
 let pprint_g_prog = seq pprint_g_decl ";;\n\n"
 

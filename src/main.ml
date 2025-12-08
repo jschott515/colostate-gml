@@ -176,8 +176,53 @@ let print_timers out =
 
 let _ = Format.fprintf Format.std_formatter "\n"
 
-let chan = open_in !fname
-let parsed_program = parse chan
+let parsed_program =
+  if Filename.check_suffix !fname ".ml" then begin
+    let chan = open_in !fname in
+    parse chan
+  end else begin
+    (* Handle c program *)
+    let dir = Filename.dirname !fname in
+    let base = Filename.basename !fname in
+    let stem = Filename.remove_extension base in
+    let json_file = !fname ^ ".json" in
+    (* Dump json *)
+    let cmd = Printf.sprintf
+      "clang -fopenmp -fno-color-diagnostics \
+       -Xclang -ast-dump=json -Xclang -ast-dump-filter=%s \
+       -fsyntax-only %s > %s"
+      stem !fname json_file
+    in
+    message (Printf.sprintf "Running clang to generate AST JSON:\n%s\n%!" cmd);
+
+    let exit_code = Sys.command cmd in
+    if exit_code <> 0 then begin
+      prerr_endline "Error: clang AST dump failed.";
+      exit 1
+    end;
+
+    (*Convert to .ml AST*)
+    let cmd = Printf.sprintf "PYTHONPATH=scripts python3 -m convert_ast %s" json_file in
+    message (Printf.sprintf "Running: %s" cmd);
+
+    let exit_code = Sys.command cmd in
+    if exit_code <> 0 then begin
+      prerr_endline "Error: AST Convert failed.";
+      exit 1
+    end;
+
+    let conv_json = (json_file ^ ".conv") in
+    message (Printf.sprintf "Converted json: %s\n" conv_json);
+  
+    let conv_prog = Yojson.Safe.from_file conv_json in
+    match p_prog_of_yojson conv_prog with
+    | Ok prog ->
+        message "Reloaded AST from JSON successfully.";
+        prog
+    | Error e ->
+        failwith ("Failed to load JSON AST: " ^ e)
+  end
+
 let _ = message "starting type inference"
 let tycheck_result =
   try infer_ty parsed_program

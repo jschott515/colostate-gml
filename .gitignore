@@ -33,8 +33,13 @@ setup.log
 # Local OPAM switch
 _opam/
 
+# Python
+__pycache__
+
 # generated files
 src/parser/lexer.ml
 gml
 src/parser/parser.ml
 src/parser/parser.mli
+*.json
+*.conv
