@@ -3,9 +3,9 @@
 #include <omp.h>
 
 long long fib(int n) {
-    long long result, a, b;
+    long long a, b;
 
-    if (n <= 1) result = 1;
+    if (n <= 1) return 1;
     else
     {
         #pragma omp task shared(a)
@@ -13,9 +13,8 @@ long long fib(int n) {
         b = fib(n - 2);
         #pragma omp taskwait
 
-        result = a + b;
+        return a + b;
     }
-    return result;
 }
 
 int main(int argc, char** argv) {

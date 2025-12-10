@@ -74,7 +74,7 @@ def convert(data: typing.MutableMapping):
             )
         )
     if kind == "CompoundStmt":
-        if len(data["inner"]) == 3:
+        if len(data["inner"]) == 2:
             return convert(data["inner"][1])  # FIXME bad assumption
         else:
             return Expr(
@@ -115,8 +115,7 @@ def convert(data: typing.MutableMapping):
     if kind == "BinaryOperator":
         op = data["opcode"]
         if op == "=":
-            if data["inner"][0]["referencedDecl"]["name"] == "result":
-                return convert(data["inner"][1])
+            pass # FIXME
         return Expr(
             EInfixop(
                 CONVERT_OPCODE[op].value,
@@ -148,6 +147,8 @@ def convert(data: typing.MutableMapping):
                 convert(data["inner"][1]),
             )
         )
+    if kind == "ReturnStmt":
+        return convert(data["inner"][0])
     raise ValueError(kind)
 
 
