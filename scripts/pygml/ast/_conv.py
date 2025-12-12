@@ -3,6 +3,18 @@ import typing
 from ._types import *
 
 
+class Task:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.captured_decl: EVar = None
+
+    def set_captured_decl(self, expr: Expr):
+        edesc = expr.edesc
+        assert isinstance(edesc, EVar)
+        self.captured_decl = edesc
+
+active_task: Task | None = None
+
 CONVERT_OPCODE = {
     "+": InfixOp.Plus,
     "Add": InfixOp.Plus,
@@ -44,7 +56,56 @@ CONVERT_OPCODE = {
 }
 
 
+def collapse(data):
+    global active_task
+    assert data["kind"] == "CompoundStmt"
+    if len(data["inner"]) == 1:
+        return convert(data["inner"][0])
+    else:
+        node = data["inner"].pop(0)
+        if node["kind"] == "OMPTaskDirective":
+            active_task = Task("fa")
+            return Expr(
+                ELet(
+                    active_task.name,
+                    None,
+                    convert(node),
+                    collapse(data),
+                )
+            )
+        if node["kind"] == "BinaryOperator":
+            op = node["opcode"]
+            assert op == "="
+            decl, assignment = node["inner"]
+            return Expr(
+                ELet(
+                    decl["referencedDecl"]["name"],
+                    None,
+                    convert(assignment),
+                    collapse(data),
+                )
+            )
+        if node["kind"] == "OMPTaskwaitDirective":
+            return Expr(
+                ELet(
+                    active_task.captured_decl.id.name,
+                    None,
+                    convert(node),
+                    collapse(data),
+                )
+            )
+        return Expr(
+            ELet(
+                "_",
+                None,
+                convert(node),
+                collapse(data),
+            )
+        )
+
+
 def convert(data: typing.MutableMapping):
+    global active_task
     kind = data["kind"]
 
     if kind == "IntegerLiteral":
@@ -74,38 +135,14 @@ def convert(data: typing.MutableMapping):
             )
         )
     if kind == "CompoundStmt":
-        if len(data["inner"]) == 2:
-            return convert(data["inner"][1])  # FIXME bad assumption
-        else:
-            return Expr(
-                ELet(
-                    "fa",
-                    None,
-                    convert(data["inner"][0]),  # Handle Task
-                    Expr(
-                        ELet(
-                            data["inner"][1]["inner"][0]["referencedDecl"]["name"],
-                            None,
-                            convert(data["inner"][1]["inner"][1]),  # to CallExpr
-                            Expr(
-                                ELet(
-                                    "a",
-                                    None,
-                                    convert(data["inner"][2]),  # to OmpTaskWait
-                                    convert(data["inner"][3]),  # to BinaryOperator - assign result
-                                )
-                            )
-                        )
-                    )
-                )
-            )
+        data["inner"] = [node for node in data["inner"] if node["kind"] != "DeclStmt"]
+        return collapse(data)
     if kind == "IfStmt":
-        assert len(data["inner"]) == 3, "requires if/then/else expressions"
         return Expr(
             EIf(
                 convert(data["inner"][0]),
                 convert(data["inner"][1]),
-                convert(data["inner"][2]),
+                None if not data.get("hasElse", False) else convert(data["inner"][2]),
             )
         )
     if kind == "ImplicitCastExpr":
@@ -115,7 +152,7 @@ def convert(data: typing.MutableMapping):
     if kind == "BinaryOperator":
         op = data["opcode"]
         if op == "=":
-            pass # FIXME
+            raise ValueError
         return Expr(
             EInfixop(
                 CONVERT_OPCODE[op].value,
@@ -124,17 +161,22 @@ def convert(data: typing.MutableMapping):
             )   
         )
     if kind == "OMPTaskDirective":
+        captured_stmt = data["inner"][-1]
+        var_decl, body = captured_stmt["inner"][0]["inner"][0]["inner"]
+        active_task.set_captured_decl(convert(var_decl))
         return Expr(
             EFuture(
                 None,
-                convert(data["inner"][2]["inner"][0]["inner"][0]["inner"][1])  # to CallExpr
+                convert(body)
             )
         )
     if kind == "OMPTaskwaitDirective":
+        task_name = active_task.name
+        active_task = None
         return Expr(
             EForce(
                 Expr(
-                    EVar(Id("fa"))  # FIXME
+                    EVar(Id(task_name))
                 )
             )
         )
